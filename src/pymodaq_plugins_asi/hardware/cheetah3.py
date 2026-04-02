@@ -102,10 +102,10 @@ class Cheetah3Config :
         :profile_name_list: list of the destination profiles.
         """
         profile_name_list = [] 
-        for key in config("CHEETAH3","destinations") : 
+        for key in config("CHEETAH3","destinations") :
             profile_name_list.append(key)
         return profile_name_list
-    
+
     def add_bpc_file(self, file_path : str) -> None :
         """
         Adds a bpc file paths to the list of available bpc file paths and saves it to the config file.
@@ -122,7 +122,7 @@ class Cheetah3Config :
         """ 
         bpc_files = config("CHEETAH3","file_paths",'bpc')
         bpc_files.append(file_path)
-        config("CHEETAH3","file_paths",'bpc') = bpc_files
+        config["CHEETAH3"]["file_paths"]['bpc'] = bpc_files
         config.save()
 
     def add_dacs_file(self, file_path : str) -> None :
@@ -141,7 +141,7 @@ class Cheetah3Config :
         """ 
         dacs_files = config("CHEETAH3","file_paths",'dacs')
         dacs_files.append(file_path)
-        config("CHEETAH3","file_paths",'dacs') = dacs_files
+        config["CHEETAH3"]["file_paths"]['dacs'] = dacs_files
         config.save()
 
     def add_save_folder(self, folder_path : str) -> None :
@@ -160,15 +160,15 @@ class Cheetah3Config :
         """ 
         save_folders = config("CHEETAH3","file_paths",'data')
         save_folders.append(folder_path)
-        config("CHEETAH3","file_paths",'data') = save_folders
+        config["CHEETAH3"]["file_paths"]['data'] = save_folders
         config.save()
-        
-    def refresh(self) : 
-        """
-        Recreates a Config object so that updates to the file are accessible.
-        """
-        global config
-        config = Config()
+
+    # def refresh(self) :
+    #     """
+    #     Recreates a Config object so that updates to the file are accessible.
+    #     """
+    #     global config
+    #     config = Config()
 
 #################################
 # II. Cheetah3 controller class #
@@ -362,7 +362,7 @@ class Cheetah3() :
         None
         """
         if trigger_mode == 'continuous' : 
-            self.set_continuous_mode()
+            self.set_continuous_mode(ntriggers = ntriggers)
         elif trigger_mode == 'automatic' : 
             self.set_automatic_mode(ntriggers = ntriggers)
         self.put_request(url=self.serverurl +'/detector/config', data = json.dumps(self.detector_config))
@@ -385,7 +385,7 @@ class Cheetah3() :
         self.detector_config['TriggerMode'] = 'CONTINUOUS'
         self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
         self.detector_config['ExposureTime'] = self.exposure_time.magnitude
-        self.detector_config['nTriggers'] = 1 
+        self.detector_config['nTriggers'] = kwargs['ntriggers']
 
     def set_automatic_mode(self, **kwargs) -> None : 
         """
@@ -502,14 +502,14 @@ class Cheetah3() :
     # II. 4. Cheetah3 start/stop functions #
     ########################################
     
-    def count_time(self,timeout : float) :
+    def count_time(self,timeout : float) -> None :
         while True :  
             current_time = time.time()
             if (current_time - self._start_time) > timeout : 
                 self.stop()
                 break
 
-    def start(self,timeout : float = 0.0):
+    def start(self,timeout : float = 0.0) -> None:
         """Perform acquisition
 
         Keyword arguments:
@@ -523,7 +523,7 @@ class Cheetah3() :
         if self.get_status() == "DA_RECORDING" : 
             self._start_time = time.time()
         else : 
-            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode='automatic')
+            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode='continuous')
             self.set_destination(profile_list=self.destination_profiles)
             response = self.get_request(url=self.serverurl + '/measurement/start')
             logger.info('Response of acquisition start: %s', response.text)

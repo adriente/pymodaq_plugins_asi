@@ -4,7 +4,15 @@ title = 'ASI Cheetah3 configuration file'
 
     [CHEETAH3.connection]
 
-        serverurl = 'http://localhost:8080'
+        serverurl = 'http://10.35.44.20:8080'
+
+    [CHEETAH3.scan]
+
+        scan_engine = "Revolon"
+        server_address = '10.35.44.20'
+        server_port = 8088
+        buffer_size = 64000
+
 
     [CHEETAH3.file_paths]
 
@@ -30,7 +38,7 @@ title = 'ASI Cheetah3 configuration file'
                 {Base = "file:/data/raw", FilePattern = "f%Hms_", SplitStrategy = "FRAME", QueueSize = 16384}
             ]
 
-        [CHEETAH3.destinations.tp3_tools]
+        [CHEETAH3.destinations.scan]
 
             Raw = [
                 {Base = "tcp://connect@127.0.0.1:8098"}

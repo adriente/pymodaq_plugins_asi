@@ -13,8 +13,8 @@ name = "pymodaq_plugins_asi"
 description = 'Pymodaq plugin for controlling Amsterdam Scientific Instruments hardware.'
 dependencies = [
     "pymodaq>=5.0.0",
-    requests,
-    pillow
+    "requests",
+    "pillow"
 ]
 
 authors = [
