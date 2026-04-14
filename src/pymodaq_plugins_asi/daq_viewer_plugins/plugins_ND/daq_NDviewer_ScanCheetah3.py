@@ -172,11 +172,12 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             self.controller = ScanCheetah3()
             camera_initialized = self.controller.check_connection()
             camera_info = "The DAQ_viewer Cheetah3 has successfully started"
-            scan_initialized, scan_info = self.scan_viewer.ini_detector()
+            scan_info, scan_initialized = self.scan_viewer.ini_detector()
             initialized = camera_initialized and scan_initialized
+            print(f'initialized : {initialized}')
             info = f"{camera_info} and {scan_info}"
             # CT02. An object (called callback), is instanciated.
-            self.callback = Cheetah3Callback(self.controller)
+            self.callback = ScanCheetah3Callback(self.controller,self.scan_viewer.controller)
             # CT03. A thread object is created (callback_thread)
             self.callback_thread = QtCore.QThread()
             # CT04. The thread object is made ready to be executed parallel to the main thread
@@ -193,7 +194,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             self.controller = controller
             initialized = True
 
-        profile_names = self.controller.config.destination_names_list()
+        profile_names = self.controller.cheetah3_config.destination_names_list()
         self.settings.addChild({'title' : 'Data destination', 'name' : 'destination', 'type' : 'itemselect', 'value' : dict(
             all_items = profile_names, selected =['live_preview']
         ), 'checkbox' : True})
@@ -221,6 +222,18 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         """
         data_x_axis = np.linspace(start= 0, stop = self.x_size//self.x_binning, num = self.x_size//self.x_binning)
         data_y_axis = np.linspace(start= 0, stop = self.y_size//self.y_binning, num = self.y_size//self.y_binning)
+        data_xscan_axis = np.linspace(start = 0,
+                                      stop = self.scan_viewer.controller.image_width,
+                                      num = self.scan_viewer.controller.image_width)
+        data_yscan_axis = np.linspace(start = 0,
+                                      stop = self.scan_viewer.controller.image_height,
+                                      num = self.scan_viewer.controller.image_height)
+        data_escan_axis = np.linspace(start = 0,
+                                      stop = 513,
+                                      num = 513)
+        self.xscan_axis = Axis(data=data_xscan_axis, label='scan pixels', units='', index=0)
+        self.yscan_axis = Axis(data=data_yscan_axis, label='scan pixels', units='', index=1)
+        self.escan_axis = Axis(data=data_escan_axis, label='camera pixels', units='', index=2)
         # Case 1 : full binning both directions -> 0D data
         if self.x_binning == self.x_size and self.y_binning == self.y_size :
             dummy_data = np.array([0.0])
@@ -253,15 +266,19 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             input data. It can be any shape up to 2D.
         """ 
         dfp = []
-        if 'scan' in self.controller.destination_profiles :
-            dfp.append(DataCalculated('TOF', data=[self.controller._data],
-                                     axes=[Axis('Time', 's', edges[0][:-1], index=0),
-                                           Axis('X', 's', edges[1][:-1], index=1),
-                                           Axis('Y', 's', edges[2][:-1], index=2)],
-                                     nav_indexes=(1, 2),
-                                     do_save=False, do_plot=True))
+        
+        # if 'scan' in self.controller.destination_profiles :
+        xscan_size = self.scan_viewer.controller.image_width
+        yscan_size = self.scan_viewer.controller.image_height
+        scan_data = np.reshape(self.controller._data, shape=(xscan_size,yscan_size,513))
+        dfp.append(DataFromPlugins('Spectrum image', data=[scan_data],
+                                    axes=[self.xscan_axis,
+                                        self.yscan_axis,
+                                        self.escan_axis],
+                                    nav_indexes=(0, 1),
+                                    do_save=False, do_plot=True))
         if "live_preview" in self.controller.destination_profiles : 
-            if self.x_binning == self.x_size and self.y_binning =Seb= self.y_size :
+            if self.x_binning == self.x_size and self.y_binning == self.y_size :
                 dfp.append(DataFromPlugins(name = 'Cheetah3 full sum',
                                     data = data,
                                     dim = 'Data0D'))
@@ -279,7 +296,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                                     dim = 'Data2D',axes=[self.x_axis, self.y_axis]))
         return dfp
 
-    def emit_data(self,data : np.ndarray) -> None :
+    def emit_data(self,data : np.ndarray, end : bool) -> None :
         # Add a bool as arg so that I can pick finishing acquisition or current
         # Avant de broadcaster les données, il vaut mieux créer une copie pour éviter d'avoir des soucis de pointeur. Le reshape doit faire une copie à priori.
         """
@@ -292,9 +309,13 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         # CT13. The callback emitted a signal to display data
         try:
             binned_data = bin2d(data,self.x_binning,self.y_binning)
-            dfp = self.prepare_dfp(data=binned_data)                   
-            self.dte_signal.emit(DataToExport('Cheetah3',
-                                            data=dfp))
+            dfp = self.prepare_dfp(data=binned_data) 
+            if end :                   
+                self.dte_signal.emit(DataToExport('Cheetah3',
+                                                data=dfp))
+            else :                    
+                self.dte_signal.emit(DataToExport('Cheetah3',
+                                                data=dfp))
         except Exception as e:
             self.emit_status(ThreadCommand('Update_Status', [str(e), 'log']))
 
@@ -361,7 +382,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
 # II. Callback class #
 ######################
 
-class Cheetah3Callback(QtCore.QObject):
+class ScanCheetah3Callback(QtCore.QObject):
     """
 
     """
@@ -376,7 +397,7 @@ class Cheetah3Callback(QtCore.QObject):
     def readout(self,num_frames : int) :
         if 'scan' in self.controller.destination_profiles :
             self.scan_readout(num_frames)
-        elif 'preview' in self.controller.destination_profiles :
+        elif 'live_preview' in self.controller.destination_profiles :
             self.preview_readout(num_frames)
         else :
             raise NotImplementedError('The selected destination profile is not supported.')

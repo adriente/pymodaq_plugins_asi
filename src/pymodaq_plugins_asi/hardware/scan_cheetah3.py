@@ -116,12 +116,12 @@ class Tp3toolsConfig:
 
 class ScanCheetah3(Cheetah3) :
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
         self.tp3tools_config = Tp3toolsConfig()
         self._init_client()
         self._xspim_size = 64
         self._yspim_size = 64
-        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
+        self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
         self._cumul_num = 1
     
     def _init_client(self) -> None :
@@ -135,7 +135,7 @@ class ScanCheetah3(Cheetah3) :
         self.client.send(config_bytes)
         
     def reset_data(self) :
-        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
+        self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
         
     def estimate_scan_time(self, pixel_dwell_time : float) -> float :
         return self.xspim_size*self.yspim_size*pixel_dwell_time 
