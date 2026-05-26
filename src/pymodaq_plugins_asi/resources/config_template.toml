@@ -2,6 +2,10 @@ title = 'ASI Cheetah3 configuration file'
 
 [CHEETAH3]
 
+    [CHEETAH3.misc]
+
+        acquisition_timeout = 15000
+
     [CHEETAH3.connection]
 
         serverurl = 'http://10.35.44.20:8080'

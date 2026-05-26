@@ -10,9 +10,11 @@ from pymodaq.utils.data import DataFromPlugins
 from pymodaq_utils.logger import set_logger, get_module_name
 import collections
 
-from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3, config
+from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3
 from pymodaq_plugins_asi.hardware.camera_utils import bin2d, get_bin_list
+from pymodaq_plugins_asi.utils import Config
 
+config = Config()
 logger = set_logger(get_module_name(__file__))
 
 ################
@@ -86,7 +88,10 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             {'title' : 'bpc file paths', 'name' : 'bpc_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
             {'title' : 'dacs file paths', 'name' : 'dacs_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
             {'title' : 'save folder paths', 'name' : 'save_folder_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
-        ]}            
+        ]},
+        {'title': 'Data destination', 'name': 'destination',
+         'type': 'itemselect', 'value': dict(all_items=[], selected=[]),
+         'checkbox': True}
     ]
 
     def commit_settings(self, param: Parameter):
@@ -144,6 +149,10 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         self.y_binning = 1
         self._x_size = 1
         self._y_size = 1
+        self.timer = QtCore.QTimer()
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(config("CHEETAH3", "misc", 'acquisition_timeout'))
+        self.timer.timeout.connect(self.stop)
 
     def ini_detector(self, controller=None):
         """Detector communication initialization
@@ -183,17 +192,20 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             initialized = True
 
         profile_names = self.controller.cheetah3_config.destination_names_list()
-        self.settings.addChild({'title' : 'Data destination', 'name' : 'destination', 'type' : 'itemselect', 'value' : dict(
-            all_items = profile_names, selected =['live_preview']
-        ), 'checkbox' : True})
+        self.settings.child('destination').setValue(dict(all_items=profile_names,
+                                                         selected=['live_preview']),)
+
         self._x_size = self.controller.x_size
         self._y_size = self.controller.y_size
-        self.settings.child('camera_settings','x_binning').setLimits(get_bin_list(self.x_size))
-        self.settings.child('camera_settings','y_binning').setLimits(get_bin_list(self.y_size))
-        self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(config("CHEETAH3","file_paths",'bpc'))
-        self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(config("CHEETAH3","file_paths",'dacs'))
-        self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
-
+        self.settings.child('camera_settings', 'x_binning').setLimits(get_bin_list(self.x_size))
+        self.settings.child('camera_settings', 'y_binning').setLimits(get_bin_list(self.y_size))
+        self.settings.child('file_paths_lists',
+                            'bpc_file_paths_list').setLimits(config("CHEETAH3", "file_paths", 'bpc'))
+        self.settings.child('file_paths_lists',
+                            'dacs_file_paths_list').setLimits(config("CHEETAH3", "file_paths", 'dacs'))
+        self.settings.child('file_paths_lists',
+                            'save_folder_paths_list').setLimits(config("CHEETAH3", "file_paths", 'data'))
+        self.set_axes()
         return info, initialized
 
     def close(self):
@@ -291,13 +303,21 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         """
         self.controller.ntriggers = int(2e9)
         try:
-            if kwargs.get('live',False) == True :
-                self.controller.start(timeout = 0.0)
+            if kwargs.get('live', False):
+                self.settings.child('camera_settings', 'x_binning').setReadonly()
+                self.settings.child('camera_settings', 'y_binning').setReadonly()
+                self.controller.start(timeout=0.0)
+
                 # CT9. We trigger the execution of the callback thread start_readout function. 
                 self.callback_signal.emit(0)
 
             else:
-                self.controller.start(timeout = 5.0)
+                if not self.timer.isActive():
+                    self.timer.start()
+                else:
+                    self.timer.stop()
+                    self.timer.start()
+                self.controller.start(timeout=0.0)
                 self.callback_signal.emit(1)
 
 
@@ -307,6 +327,8 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
     def stop(self):
         """Stop the current grab hardware wise if necessary"""
+        self.settings.child('camera_settings', 'x_binning').setWritable()
+        self.settings.child('camera_settings', 'y_binning').setWritable()
         self.controller.stop()
         
     ####################
