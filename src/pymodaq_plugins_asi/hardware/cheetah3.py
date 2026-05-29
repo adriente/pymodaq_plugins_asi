@@ -211,7 +211,7 @@ class Cheetah3() :
         self._bpc_file = None
         self._dacs_file = None
         self._save_folder = None
-        self._exposure_time = Quantity('10ms')
+        self._exposure_time = Quantity('100ms')
         self._readout_time = Quantity('10ms')
         self._ntriggers = 1
         self._destination_profiles = ['live_preview']

@@ -75,7 +75,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
     params = comon_parameters + [
         {'title' : "Frame-based camera settings", 'name' : 'camera_settings', 'type' : 'group', 'expanded' : True, 'children' : [
-            {'title' : 'Exposure time', 'name' : 'exposure_time', 'type' : 'float', 'value' : 0.5},
+            {'title' : 'Exposure time', 'name' : 'exposure_time', 'type' : 'float', 'value' : 0.1},
             {'title' : 'x binning', 'name' : 'x_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
             {'title' : 'y binning', 'name' : 'y_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
         ]},
