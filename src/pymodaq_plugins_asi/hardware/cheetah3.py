@@ -365,6 +365,8 @@ class Cheetah3() :
             self.set_continuous_mode(ntriggers = ntriggers)
         elif trigger_mode == 'automatic' : 
             self.set_automatic_mode(ntriggers = ntriggers)
+        elif trigger_mode == 'softwarestart_softwarestop' : 
+            self.set_softstart_softstop_mode(ntriggers = ntriggers)
         self.put_request(url=self.serverurl +'/detector/config', data = json.dumps(self.detector_config))
 
 
@@ -385,6 +387,23 @@ class Cheetah3() :
         self.detector_config['TriggerMode'] = 'CONTINUOUS'
         self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
         self.detector_config['ExposureTime'] = self.exposure_time.magnitude
+        self.detector_config['nTriggers'] = kwargs['ntriggers']
+
+    def set_softstart_softstop_mode(self, **kwargs) -> None :
+        """
+        Modifies the detector config for continuous acquisition mode. 
+
+        Results
+        -------
+        None
+
+        Notes
+        -----
+        The `TriggerPeriod` and the `ExposureTime` have to be set equal.
+        """ 
+        self.detector_config['TriggerMode'] = 'SOFTWARESTART_SOFTWARESTOP'
+        # self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
+        # self.detector_config['ExposureTime'] = self.exposure_time.magnitude
         self.detector_config['nTriggers'] = kwargs['ntriggers']
 
     def set_automatic_mode(self, **kwargs) -> None : 
@@ -501,15 +520,8 @@ class Cheetah3() :
     ########################################
     # II. 4. Cheetah3 start/stop functions #
     ########################################
-    
-    def count_time(self,timeout : float) -> None :
-        while True :  
-            current_time = time.time()
-            if (current_time - self._start_time) > timeout : 
-                self.stop()
-                break
 
-    def start(self,timeout : float = 0.0) -> None:
+    def start(self, mode = 'continuous') -> None:
         """Perform acquisition
 
         Keyword arguments:
@@ -523,14 +535,13 @@ class Cheetah3() :
         if self.get_status() == "DA_RECORDING" : 
             self._start_time = time.time()
         else : 
-            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode='continuous')
+            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode=mode)
             self.set_destination(profile_list=self.destination_profiles)
-            response = self.get_request(url=self.serverurl + '/measurement/start')
+            if mode == 'softwarestart_softwarestop' : 
+                response = self.get_request(url=self.serverurl + '/measurement/trigger/start')
+            else : 
+                response = self.get_request(url=self.serverurl + '/measurement/start')
             logger.info('Response of acquisition start: %s', response.text)
-            if timeout > 0.0 : 
-                self._start_time = time.time()
-                timer = threading.Thread(target=self.count_time, args=(timeout,))
-                timer.start()
         # The snap mode of the grab_data method of the DAQ viewer would technically call many times start and stop 
         # Since the camera takes some time to start and stop, it is better to stop only after a timeout.
         # In case of a DAQ scan, the snap is called repeatdly which can cause some issue if the camera is started/stopped too fast.

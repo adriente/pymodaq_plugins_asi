@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from pymodaq_utils.utils import ThreadCommand
 from pymodaq_data.data import DataToExport, Axis
@@ -8,7 +9,7 @@ from qtpy.QtCore import QThread
 from pymodaq.control_modules.viewer_utility_classes import DAQ_Viewer_base, comon_parameters, main
 from pymodaq.utils.data import DataFromPlugins
 from pymodaq_utils.logger import set_logger, get_module_name
-import collections
+# import collections
 
 from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3
 from pymodaq_plugins_asi.hardware.camera_utils import bin2d, get_bin_list
@@ -306,18 +307,18 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             if kwargs.get('live', False):
                 self.settings.child('camera_settings', 'x_binning').setReadonly()
                 self.settings.child('camera_settings', 'y_binning').setReadonly()
-                self.controller.start(timeout=0.0)
+                self.controller.start()
 
                 # CT9. We trigger the execution of the callback thread start_readout function. 
                 self.callback_signal.emit(0)
 
             else:
-                if not self.timer.isActive():
-                    self.timer.start()
-                else:
-                    self.timer.stop()
-                    self.timer.start()
-                self.controller.start(timeout=0.0)
+                # if not self.timer.isActive():
+                #     self.timer.start()
+                # else:
+                #     self.timer.stop()
+                #     self.timer.start()
+                self.controller.start()
                 self.callback_signal.emit(1)
 
 
@@ -371,17 +372,19 @@ class Cheetah3Callback(QtCore.QObject):
                     logger.info('Acquistion stopped.')
                     break
         else : 
-            for i in range(num_frames) : 
-                try : 
-                # CT10. We start a blocking function. It waits until data are avaible.
-                    current_image = self.controller.preview() 
-                    self.data_sig.emit(current_image)
-                    if self.controller.get_status() == "DA_IDLE" : 
-                        logger.info("Acquisition finished")
-                        break
-                except BrokenPipeError : 
-                    logger.info('Acquistion stopped.')
-                    break
+            # for i in range(num_frames) : 
+            try : 
+            # CT10. We start a blocking function. It waits until data are avaible.
+                time.sleep(self.controller.exposure_time.to('s').magnitude)
+                current_image = self.controller.preview() 
+                response = self.controller.get_request(url=self.serverurl + '/measurement/trigger/stop')
+                self.data_sig.emit(current_image)
+                # if self.controller.get_status() == "DA_IDLE" : 
+                #     logger.info("Acquisition finished")
+                #     break
+            except BrokenPipeError : 
+                logger.info('Acquistion stopped.')
+                break
 
 ###########################            
 # III. Local testing code #
