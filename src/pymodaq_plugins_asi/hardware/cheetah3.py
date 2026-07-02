@@ -367,6 +367,8 @@ class Cheetah3() :
             self.set_automatic_mode(ntriggers = ntriggers)
         elif trigger_mode == 'softwarestart_softwarestop' : 
             self.set_softstart_softstop_mode(ntriggers = ntriggers)
+        elif trigger_mode == 'softwarestart_timerstop' : 
+            self.set_softstart_timerstop_mode(ntriggers = ntriggers)
         self.put_request(url=self.serverurl +'/detector/config', data = json.dumps(self.detector_config))
 
 
@@ -421,7 +423,24 @@ class Cheetah3() :
         self.detector_config['TriggerMode'] = 'AUTOTRIGSTART_TIMERSTOP'
         self.detector_config['TriggerPeriod'] = (self.exposure_time + self._readout_time ).magnitude
         self.detector_config['ExposureTime'] = self.exposure_time.magnitude
-        self.detector_config['nTriggers'] = kwargs['ntriggers'] 
+        self.detector_config['nTriggers'] = kwargs['ntriggers']
+        
+    def set_softstart_timerstop_mode(self, **kwargs) -> None : 
+        """
+        Modifies the detector config for autotrigger start stop acquisition mode. 
+
+        Results
+        -------
+        None
+
+        Notes
+        -----
+        A minimal time of 2 ms is added for readout, between two exposures. 
+        """ 
+        self.detector_config['TriggerMode'] = 'SOFTWARESTART_TIMERSTOP'
+        self.detector_config['TriggerPeriod'] = (self.exposure_time + self._readout_time ).magnitude
+        self.detector_config['ExposureTime'] = self.exposure_time.magnitude
+        self.detector_config['nTriggers'] = kwargs['ntriggers']
 
     def set_destination(self, profile_list : list[str]) -> None:
         """
@@ -537,10 +556,10 @@ class Cheetah3() :
         else : 
             self.set_detector_config(ntriggers=self.ntriggers, trigger_mode=mode)
             self.set_destination(profile_list=self.destination_profiles)
-            if mode == 'softwarestart_softwarestop' : 
-                response = self.get_request(url=self.serverurl + '/measurement/trigger/start')
-            else : 
-                response = self.get_request(url=self.serverurl + '/measurement/start')
+            # if mode == 'softwarestart_softwarestop' : 
+            #     response = self.get_request(url=self.serverurl + '/measurement/trigger/start')
+            # else : 
+            response = self.get_request(url=self.serverurl + '/measurement/start')
             logger.info('Response of acquisition start: %s', response.text)
         # The snap mode of the grab_data method of the DAQ viewer would technically call many times start and stop 
         # Since the camera takes some time to start and stop, it is better to stop only after a timeout.

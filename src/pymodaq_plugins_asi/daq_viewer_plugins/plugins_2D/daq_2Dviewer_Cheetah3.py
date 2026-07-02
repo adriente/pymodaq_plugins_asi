@@ -313,12 +313,16 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
                 self.callback_signal.emit(0)
 
             else:
-                # if not self.timer.isActive():
-                #     self.timer.start()
-                # else:
-                #     self.timer.stop()
-                #     self.timer.start()
-                self.controller.start()
+                if not self.timer.isActive():
+                    self.controller.start(mode = 'softwarestart_timerstop')
+                    response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/start')
+                    self.timer.start()
+                else:
+                    response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/start')
+                    self.timer.stop()
+                    self.timer.start()
+                
+                
                 self.callback_signal.emit(1)
 
 
@@ -375,16 +379,17 @@ class Cheetah3Callback(QtCore.QObject):
             # for i in range(num_frames) : 
             try : 
             # CT10. We start a blocking function. It waits until data are avaible.
-                time.sleep(self.controller.exposure_time.to('s').magnitude)
+                
+                # time.sleep(self.controller.exposure_time.to('s').magnitude)
                 current_image = self.controller.preview() 
-                response = self.controller.get_request(url=self.serverurl + '/measurement/trigger/stop')
+                # response = self.controller.get_request(url=self.serverurl + '/measurement/trigger/stop')
                 self.data_sig.emit(current_image)
                 # if self.controller.get_status() == "DA_IDLE" : 
                 #     logger.info("Acquisition finished")
-                #     break
+                    # break
             except BrokenPipeError : 
                 logger.info('Acquistion stopped.')
-                break
+                # break
 
 ###########################            
 # III. Local testing code #
