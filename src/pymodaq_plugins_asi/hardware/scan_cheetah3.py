@@ -7,8 +7,11 @@ import time
 from numba import njit
 import numpy as np
 from typing import Any
+from pymodaq_utils.logger import set_logger, get_module_name
 
 # BUFFER_SIZE = 64000
+
+logger = set_logger(get_module_name(__file__))
 
 @njit
 def fill_array(array,event_list) : 
@@ -176,6 +179,30 @@ class ScanCheetah3(Cheetah3) :
             
     #     else : 
     #         super().start(timeout = timeout)
+    
+    def start(self, mode = 'continuous') -> None:
+        """Perform acquisition
+
+        Keyword arguments:
+        serverurl -- the URL of the running SERVAL (string)
+        
+        Parameters
+        ----------
+        timeout : float
+            time until camera stop is automatically called
+        """
+        if 'scan' in self.destination_profiles :
+            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode=mode)
+            self.set_destination(profile_list=self.destination_profiles)
+            self.send_config_bytes()
+            response = self.get_request(url=self.serverurl + '/measurement/start')
+            logger.info('Response of acquisition start: %s', response.text)
+        else :
+            super().start(mode=mode)
+            
+    def stop(self):
+        self.client.close()
+        super().stop()
         
         
         

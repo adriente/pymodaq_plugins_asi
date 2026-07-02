@@ -217,7 +217,6 @@ class Cheetah3() :
         self._destination_profiles = ['live_preview']
         self._x_size = None
         self._y_size = None
-        self._start_time = 0.0
 
     #######################################
     # II. 1. `requests` generic functions #
@@ -551,19 +550,11 @@ class Cheetah3() :
         timeout : float
             time until camera stop is automatically called
         """
-        if self.get_status() == "DA_RECORDING" : 
-            self._start_time = time.time()
-        else : 
-            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode=mode)
-            self.set_destination(profile_list=self.destination_profiles)
-            # if mode == 'softwarestart_softwarestop' : 
-            #     response = self.get_request(url=self.serverurl + '/measurement/trigger/start')
-            # else : 
-            response = self.get_request(url=self.serverurl + '/measurement/start')
-            logger.info('Response of acquisition start: %s', response.text)
-        # The snap mode of the grab_data method of the DAQ viewer would technically call many times start and stop 
-        # Since the camera takes some time to start and stop, it is better to stop only after a timeout.
-        # In case of a DAQ scan, the snap is called repeatdly which can cause some issue if the camera is started/stopped too fast.
+        self.set_detector_config(ntriggers=self.ntriggers, trigger_mode=mode)
+        self.set_destination(profile_list=self.destination_profiles)
+        response = self.get_request(url=self.serverurl + '/measurement/start')
+        logger.info('Response of acquisition start: %s', response.text)
+
 
     def preview(self):
         """Preview of collected data

@@ -14,7 +14,8 @@ description = 'Pymodaq plugin for controlling Amsterdam Scientific Instruments h
 dependencies = [
     "pymodaq>=5.0.0",
     "requests",
-    "pillow"
+    "pillow",
+    "numba"
 ]
 
 authors = [

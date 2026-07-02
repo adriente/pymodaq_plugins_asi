@@ -125,7 +125,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             # self.controller.cheetah3_config.refresh()
             self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
         elif param.name() == 'destination' :
-            self.controller.camera_controller.cheetah3_config.build_destination(param.value()["selected"])
+            self.controller.camera_controller.destination_profiles = param.value()["selected"]
         elif param.name() == 'bpc_file_paths_list' :
             self.controller.camera_controller.bpc_file = param.value()
         elif param.name() == 'dacs_file_paths_list' :
@@ -188,7 +188,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                 raise NotImplementedError("No scan valid scan engine was provided.")
             camera_initialized = self.controller.camera_controller.check_connection()
             connect_rc = self.controller.connect()
-            if connect_rc == 0x0000000 #SUCCESS :
+            if connect_rc == 0x0000000 :  #SUCCESS :
                 scan_initialized = True
             else :
                 info = f"Init failed (return code {connect_rc:08X})!"
@@ -361,23 +361,22 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                     
                     # self.scan_viewer.grab_data(**kwargs)
                     self.controller.start(num_frame=0)
-                    self.controller.camera_controller.start(timeout=0.0)
+                    self.controller.camera_controller.start()
                     self.callback_signal.emit(0)
                 else :
                     self.controller.start(num_frame=1)
-                    self.controller.camera_controller.start(timeout=0.0)
+                    self.controller.camera_controller.start()
                     pixel_time_s = self.dwell_time/1e6
                     frame_number = round(self.controller.camera_controller.estimate_scan_time(pixel_time_s)/self.controller.camera_controller.exposure_time)
                     self.callback_signal.emit(frame_number)
             else : 
-                if kwargs.get('live',False) :
-                    self.controller.start(timeout = 0.0)
-                    # CT9. We trigger the execution of the callback thread start_readout function. 
-                    self.callback_signal.emit(0)
+                self.controller.start()
+                # CT9. We trigger the execution of the callback thread start_readout function. 
+                self.callback_signal.emit(0)
 
-                else:
-                    self.controller.start(timeout = 5.0)
-                    self.callback_signal.emit(1)
+                # else:
+                #     self.controller.start(timeout = 5.0)
+                #     self.callback_signal.emit(1)
 
 
         except Exception as e:
@@ -386,7 +385,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
 
     def stop(self):
         """Stop the current grab hardware wise if necessary"""
-        self.controller.stop()
+        self.controller.stop_immediately()
         self.controller.camera_controller.stop()
         
     ####################
@@ -452,7 +451,7 @@ class ScanCheetah3Callback(QtCore.QObject):
                     break
                 
     def scan_readout(self,num_frames : int) :
-        current_image = np.array(0)
+        current_image = np.zeros((512,512))
         if num_frames == 0 :
             if 'preview' in self.controller.destination_profiles :
                 while True :
@@ -507,7 +506,7 @@ class ScanCheetah3Callback(QtCore.QObject):
                         if not self.scan_controller.wait_for_acq() :
                             logger.info("Scan finished")
                             break
-                    except BrokenPipeError :
+                    except (BrokenPipeError, OSError) :
                         logger.info('Acquistion stopped.')
                         break
         else :

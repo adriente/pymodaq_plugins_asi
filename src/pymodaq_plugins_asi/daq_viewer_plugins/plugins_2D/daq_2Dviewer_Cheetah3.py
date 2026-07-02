@@ -125,7 +125,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             # self.controller.cheetah3_config.refresh()
             self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
         elif param.name() == 'destination' :
-            self.controller.cheetah3_config.build_destination(param.value()["selected"])
+            self.controller.camera_controller.destination_profiles = param.value()["selected"]
         elif param.name() == 'bpc_file_paths_list' :
             self.controller.bpc_file = param.value()
         elif param.name() == 'dacs_file_paths_list' :
