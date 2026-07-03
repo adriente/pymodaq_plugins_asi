@@ -129,6 +129,7 @@ class ScanCheetah3(Cheetah3) :
     
     def _init_client(self) -> None :
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client.settimeout(5)
         self.address = (config("CHEETAH3","scan","server_address"),
                         config("CHEETAH3","scan","server_port"))
         
@@ -201,8 +202,10 @@ class ScanCheetah3(Cheetah3) :
             super().start(mode=mode)
             
     def stop(self):
-        self.client.close()
         super().stop()
+        self.client.shutdown(socket.SHUT_RDWR)
+        self.client.close()
+        
         
         
         
