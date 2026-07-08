@@ -134,9 +134,11 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             self.controller.camera_controller.save_folder = param.value()
         if param.name() == "image_width":
             self.controller.image_width = param.value()
+            self.controller.camera_controller.xspim_size = self.controller.image_width
             self.set_axes()
         if param.name() == "image_height" :
             self.controller.image_height = param.value()
+            self.controller.camera_controller.yspim_size = self.controller.image_height
             self.set_axes()
         if param.name() == "dwell_time" :
             self.controller.dwell_time = param.value()

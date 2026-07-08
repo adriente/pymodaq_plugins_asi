@@ -122,14 +122,14 @@ class ScanCheetah3(Cheetah3) :
         super().__init__()
         self.tp3tools_config = Tp3toolsConfig()
         self._init_client()
-        self._xspim_size = 64
-        self._yspim_size = 64
+        self._xspim_size = 512
+        self._yspim_size = 512
         self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
         self._cumul_num = 1
     
     def _init_client(self) -> None :
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.settimeout(5)
+        self.client.settimeout(500)
         self.address = (config("CHEETAH3","scan","server_address"),
                         config("CHEETAH3","scan","server_port"))
         
@@ -152,9 +152,9 @@ class ScanCheetah3(Cheetah3) :
     def xspim_size(self,value : int) -> None :
         self.tp3tools_config.xspim_size = value
         self.tp3tools_config.xscan_size = value
-        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
         self._xspim_size = value
-
+        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
+        
     @property
     def yspim_size(self) -> int :
         return self._yspim_size
@@ -163,8 +163,9 @@ class ScanCheetah3(Cheetah3) :
     def yspim_size(self,value : int) -> None :
         self.tp3tools_config.yspim_size = value
         self.tp3tools_config.yscan_size = value
-        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
         self._yspim_size = value
+        self._data = np.zeros((self._xspim_size*self._yspim_size*(self._x_size+1),))
+        
         
     @property
     def cumul_num(self) -> int : 
@@ -205,6 +206,8 @@ class ScanCheetah3(Cheetah3) :
         super().stop()
         self.client.shutdown(socket.SHUT_RDWR)
         self.client.close()
+        time.sleep(0.01)
+        self._init_client()
         
         
         
