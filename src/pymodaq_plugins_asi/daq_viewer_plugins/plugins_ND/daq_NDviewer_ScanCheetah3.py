@@ -82,6 +82,8 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             {'title': 'Scan width', 'name': 'image_width', 'type': 'int', 'value': 512},
             {'title': 'Scan height', 'name': 'image_height', 'type': 'int', 'value': 512},
             {'title' : 'Dwell time (us)', 'name' : 'dwell_time', 'type' : 'int', 'value' : 10},
+            {'title' : 'Cumul number', 'name' : 'cumul_num','type' : 'int', 'value' : 1},
+            {'title' : 'Starting delay', 'name' : 'video_time', 'type' : 'int', 'value' : 0}
         ]},
         {'title' : 'File paths input', 'name' : 'file_paths', 'type' : 'group', 'expanded' : False, 'children' : [
             {'title' : 'Add bpc file path', 'name' : 'bpc_file_path', 'type' : 'str', 'value' : '/home/asi/'},
@@ -132,16 +134,20 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             self.controller.camera_controller.dacs_file = param.value()
         elif param.name() == 'save_folder_paths_list' :
             self.controller.camera_controller.save_folder = param.value()
-        if param.name() == "image_width":
+        elif param.name() == "image_width":
             self.controller.image_width = param.value()
             self.controller.camera_controller.xspim_size = self.controller.image_width
             self.set_axes()
-        if param.name() == "image_height" :
+        elif param.name() == "image_height" :
             self.controller.image_height = param.value()
             self.controller.camera_controller.yspim_size = self.controller.image_height
             self.set_axes()
-        if param.name() == "dwell_time" :
+        elif param.name() == "dwell_time" :
             self.controller.dwell_time = param.value()
+        elif param.name() == 'cumul_num' : 
+            self.controller.camera_controller.cumul_num = param.value()
+        elif param.name() == 'video_time' : 
+            self.controller.camera_controller.video_time = param.value()
 
     ########################
     # I. 1. Initialisation #
@@ -368,8 +374,9 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             if kwargs.get('live',False) :
                 
                 # self.scan_viewer.grab_data(**kwargs)
-                self.controller.start(num_frame=0)
+                
                 self.controller.camera_controller.start()
+                self.controller.start(num_frame=0)
                 self.callback_signal.emit(0)
             else :
                 self.controller.start(num_frame=1)
@@ -450,8 +457,9 @@ class ScanCheetah3Callback(QtCore.QObject):
                 event_list = np.frombuffer(data_read, dtype=np.uint32)
                 fill_array(self.controller._data,event_list)
                 
-                if self.scan_controller.frame_count % self.controller.cumul_num == 0 :
+                if self.scan_controller.get_frame_index() % self.controller.cumul_num == 0 :
                     self.data_sig.emit(np.array(0),True)
+                    self.controller.reset_data()
                 else :
                     self.data_sig.emit(np.array(0),False)
                 if self.controller.get_status() == "DA_IDLE" :

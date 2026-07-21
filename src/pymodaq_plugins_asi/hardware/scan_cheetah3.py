@@ -14,8 +14,10 @@ from pymodaq_utils.logger import set_logger, get_module_name
 logger = set_logger(get_module_name(__file__))
 
 @njit
-def fill_array(array,event_list) : 
-    for value in event_list : 
+def fill_array(array,event_list) :
+    # print(max(event_list))
+    # print(array.shape)
+    for value in event_list :
         array[value] +=1
 
 class Tp3toolsConfig:
@@ -126,6 +128,7 @@ class ScanCheetah3(Cheetah3) :
         self._yspim_size = 512
         self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
         self._cumul_num = 1
+        self._video_time = 0
     
     def _init_client(self) -> None :
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -168,12 +171,22 @@ class ScanCheetah3(Cheetah3) :
         
         
     @property
-    def cumul_num(self) -> int : 
+    def cumul_num(self) -> int :
         return self._cumul_num
     
     @cumul_num.setter
     def cumul_num(self, value : int) -> None :
         self._cumul_num = value 
+        
+    @property
+    def video_time(self) -> int :
+        return self._video_time
+    
+    @video_time.setter
+    def video_time(self,value : int) -> None :
+        self._video_time = value
+        self.tp3tools_config.video_time = value
+    
 
     # def start(self,timeout = 0.0) :
     #     # diffrent ways depending on destination name : if tp3tools go to scan, else use the super().
