@@ -238,7 +238,7 @@ class Cheetah3() :
         :Response: Response object from the server
 
         """
-        response = requests.get(url=url, timeout=10.0)
+        response = requests.get(url=url, timeout=60.0)
         if response.status_code != expected_status:
             raise BrokenPipeError("Failed GET request: %s, response: %s %s",url, response.status_code, response.text)
 
@@ -262,7 +262,7 @@ class Cheetah3() :
         :Response: Response object from the server
 
         """
-        response = requests.put(url=url, data=data, timeout=10.0)
+        response = requests.put(url=url, data=data, timeout=60.0)
         if response.status_code != expected_status:
             raise BrokenPipeError("Failed PUT request: %s, response: %s %s",url, response.status_code, response.text)
 
@@ -360,13 +360,13 @@ class Cheetah3() :
         
         None
         """
-        if trigger_mode == 'continuous' : 
+        if trigger_mode == 'continuous' :
             self.set_continuous_mode(ntriggers = ntriggers)
-        elif trigger_mode == 'automatic' : 
+        elif trigger_mode == 'automatic' :
             self.set_automatic_mode(ntriggers = ntriggers)
-        elif trigger_mode == 'softwarestart_softwarestop' : 
+        elif trigger_mode == 'softwarestart_softwarestop' :
             self.set_softstart_softstop_mode(ntriggers = ntriggers)
-        elif trigger_mode == 'softwarestart_timerstop' : 
+        elif trigger_mode == 'softwarestart_timerstop' :
             self.set_softstart_timerstop_mode(ntriggers = ntriggers)
         self.put_request(url=self.serverurl +'/detector/config', data = json.dumps(self.detector_config))
 
@@ -407,7 +407,7 @@ class Cheetah3() :
         # self.detector_config['ExposureTime'] = self.exposure_time.magnitude
         self.detector_config['nTriggers'] = kwargs['ntriggers']
 
-    def set_automatic_mode(self, **kwargs) -> None : 
+    def set_automatic_mode(self, **kwargs) -> None :
         """
         Modifies the detector config for autotrigger start stop acquisition mode. 
 
@@ -577,7 +577,8 @@ class Cheetah3() :
         else : 
             return self.get_dashboard()["Measurement"]["Status"]
 
-    def stop(self) : 
+    def stop(self) :
+        print("Calling stop of the Cheetah3.")
         response = self.get_request(url=self.serverurl + '/measurement/stop')
         data = response.text
         logger.info('Response of acquisition stop : %s',data)

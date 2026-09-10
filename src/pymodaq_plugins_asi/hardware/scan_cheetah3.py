@@ -127,6 +127,8 @@ class ScanCheetah3(Cheetah3) :
         self._xspim_size = 512
         self._yspim_size = 512
         self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
+        self._preview_data = np.zeros((self.x_size,self.y_size))
+        self._data_to_display = [self._data,self._preview_data]
         self._cumul_num = 1
         self._video_time = 0
     
@@ -141,8 +143,30 @@ class ScanCheetah3(Cheetah3) :
         config_bytes = self.tp3tools_config.create_configuration_bytes()
         self.client.send(config_bytes)
         
+    def update_data(self) -> None :
+        profiles = self.destination_profiles
+        if 'scan' in profiles :
+            self._data_to_display[0] = self._data
+        if 'live_preview' in profiles :
+            self._data_to_display[1] = self._preview_data
+        
     def reset_data(self) :
-        self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
+        profiles = self.destination_profiles
+        if 'scan' in profiles :
+            self._data = np.zeros((self._xspim_size*self._yspim_size*(self.x_size+1),))
+        if 'live_preview' in profiles :
+            self._preview_data = np.zeros((512,512))
+            
+    def set_data_channels(self) : 
+        profiles = self.destination_profiles
+        if 'scan' in profiles :
+            self._data_to_display[0] = self._data
+        else : 
+            self._data_to_display[0] = None
+        if 'live_preview' in profiles :
+            self._data_to_display[1] = self._preview_data
+        else : 
+            self._data_to_display[1] = None
         
     def estimate_scan_time(self, pixel_dwell_time : float) -> float :
         return self.xspim_size*self.yspim_size*pixel_dwell_time 
@@ -186,14 +210,6 @@ class ScanCheetah3(Cheetah3) :
     def video_time(self,value : int) -> None :
         self._video_time = value
         self.tp3tools_config.video_time = value
-    
-
-    # def start(self,timeout = 0.0) :
-    #     # diffrent ways depending on destination name : if tp3tools go to scan, else use the super().
-    #     if 'scan' in self.destination_profiles : 
-            
-    #     else : 
-    #         super().start(timeout = timeout)
     
     def start(self, mode = 'continuous') -> None:
         """Perform acquisition
