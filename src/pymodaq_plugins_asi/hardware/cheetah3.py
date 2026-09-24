@@ -388,6 +388,7 @@ class Cheetah3() :
         self.detector_config['TriggerMode'] = 'CONTINUOUS'
         self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
         self.detector_config['ExposureTime'] = self.exposure_time.magnitude
+        self.detector_config['Tdc'] = ['PN0','PN0']
         self.detector_config['nTriggers'] = kwargs['ntriggers']
 
     def set_softstart_softstop_mode(self, **kwargs) -> None :
@@ -403,6 +404,7 @@ class Cheetah3() :
         The `TriggerPeriod` and the `ExposureTime` have to be set equal.
         """ 
         self.detector_config['TriggerMode'] = 'SOFTWARESTART_SOFTWARESTOP'
+        self.detector_config['Tdc'] = ['PN0123','PN0123']
         # self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
         # self.detector_config['ExposureTime'] = self.exposure_time.magnitude
         self.detector_config['nTriggers'] = kwargs['ntriggers']
@@ -496,27 +498,27 @@ class Cheetah3() :
             logger.info('the dacs file : %s is not part of the available files.', folder_name) 
 
     @property
-    def exposure_time (self) -> Quantity : 
+    def exposure_time (self) -> Quantity :
         return self._exposure_time.to('s')
     
     @exposure_time.setter
-    def exposure_time(self,value) -> None : 
-        if isinstance(value,str) : 
+    def exposure_time(self,value) -> None :
+        if isinstance(value,str) :
             q = Quantity(value)
-        else : 
+        else :
             q = Quantity(value,'s')
         self._exposure_time = q
 
     @property
-    def ntriggers(self) -> int : 
+    def ntriggers(self) -> int :
         return self._ntriggers
 
     @ntriggers.setter
-    def ntriggers(self, value : int) -> None : 
+    def ntriggers(self, value : int) -> None :
         self._ntriggers = value
 
     @property
-    def destination_profiles(self) -> list[str] : 
+    def destination_profiles(self) -> list[str] :
         return self._destination_profiles
     
     @destination_profiles.setter
@@ -524,13 +526,13 @@ class Cheetah3() :
         self._destination_profiles = value
         
     @property
-    def x_size(self) -> int : 
-        if self._x_size is None : 
+    def x_size(self) -> int :
+        if self._x_size is None :
             self._x_size = self.detector_info["PixCount"]//self.detector_info["NumberOfRows"]
         return self._x_size
     
     @property
-    def y_size(self) -> int : 
+    def y_size(self) -> int :
         if self._y_size is None : 
             self._y_size = self.detector_info["NumberOfRows"]
         return self._y_size

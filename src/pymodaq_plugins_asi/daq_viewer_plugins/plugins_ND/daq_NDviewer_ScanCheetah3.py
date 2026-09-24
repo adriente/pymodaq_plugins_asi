@@ -1,5 +1,7 @@
 import numpy as np
 from pathlib import Path
+import time
+import socket
 
 from pymodaq_utils.utils import ThreadCommand
 from pymodaq_data.data import DataToExport, Axis
@@ -95,7 +97,11 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             {'title' : 'bpc file paths', 'name' : 'bpc_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
             {'title' : 'dacs file paths', 'name' : 'dacs_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
             {'title' : 'save folder paths', 'name' : 'save_folder_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
-        ]}            
+        ]},
+        {'title' : "Data destinations", 'name' : 'destinations_group', 'type' : 'group', 'expanded' : True, 'children' : [
+            {'title' : 'Save locally', 'name' : 'save_locally', 'type' : 'bool', 'value' : False},
+            {'title' : 'Acquisition mode', 'name' : 'destination', 'type' : 'list','value' : 'live_preview','limits' : ['scan','live_preview']},
+        ]},
     ]
 
     def commit_settings(self, param: Parameter):
@@ -128,9 +134,20 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             # self.controller.cheetah3_config.refresh()
             self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
         elif param.name() == 'destination' :
-            self.controller.camera_controller.destination_profiles = param.value()["selected"]
+            self.update_destination(param.value())
             self.controller.camera_controller.set_data_channels()
             self.set_axes()
+        elif param.name() == 'save_locally' :
+            if param.value() :
+                if 'save_locally' in self.controller.camera_controller.destination_profiles :
+                    pass
+                else : 
+                    self.controller.camera_controller.destination_profiles.append('save_locally')
+            else :
+                if 'save_locally' in self.controller.camera_controller.destination_profiles :
+                    self.controller.camera_controller.destination_profiles.remove('save_locally')
+                else :
+                    pass
         elif param.name() == 'bpc_file_paths_list' :
             self.controller.camera_controller.bpc_file = param.value()
         elif param.name() == 'dacs_file_paths_list' :
@@ -178,6 +195,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         self.timer.setSingleShot(True)
         self.timer.setInterval(config("CHEETAH3", "misc", 'acquisition_timeout'))
         self.timer.timeout.connect(self.stop)
+        self.exclusive_destinations = ['scan','live_preview']
 
     def ini_detector(self, controller=None):
         """Detector communication initialization
@@ -220,11 +238,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         self.init_callback_thread()
 
         # Parameters init
-        profile_names = self.controller.camera_controller.cheetah3_config.destination_names_list()
-        self.settings.addChild({'title' : 'Data destination', 'name' : 'destination', 'type' : 'itemselect', 'value' : dict(
-            all_items = profile_names, selected =['scan']
-        ), 'checkbox' : True})
-        self.controller.camera_controller.destination_profiles = ['scan']
+        self.controller.camera_controller.destination_profiles = ['live_preview']
         self._x_size = self.controller.camera_controller.x_size
         self._y_size = self.controller.camera_controller.y_size
         self.settings.child('camera_settings','x_binning').setLimits(get_bin_list(self.x_size))
@@ -287,8 +301,12 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         self.xscan_axis = Axis(data=data_xscan_axis, label='x scan pixels', units='', index=0)
         self.yscan_axis = Axis(data=data_yscan_axis, label='x scan pixels', units='', index=1)
         self.escan_axis = Axis(data=data_escan_axis, label='kx camera pixels', units='', index=2)
-        self.xpreview_axis = Axis(data=preview_x_axis,label='kx camera pixels', units='',index=0)
-        self.ypreview_axis = Axis(data=preview_y_axis,label='ky camera pixels', units='',index=1)
+        match (self.x_binning, self.y_binning) :
+            case (self.x_size,_) :
+                self.ypreview_axis = Axis(data=preview_y_axis,label='ky camera pixels', units='',index=0)
+            case (_,_) :
+                self.xpreview_axis = Axis(data=preview_x_axis,label='kx camera pixels', units='',index=0)
+                self.ypreview_axis = Axis(data=preview_y_axis,label='ky camera pixels', units='',index=1)
         # Case 1 : full binning both directions -> 0D data
         # if self.x_binning == self.x_size and self.y_binning == self.y_size :
         #     dummy_data = np.array([0.0])
@@ -331,19 +349,23 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                 case (self.x_size,self.y_size) :
                     dfp.append(DataFromPlugins(name = 'Cheetah3 full sum',
                             data = [binned_preview_data],
-                            dim = 'Data0D'))
+                            dim = 'Data0D',
+                            do_plot = True))
                 case (self.x_size,_) :
                     dfp.append(DataFromPlugins(name = 'Cheetah3 sum x',
                             data = [np.atleast_1d(binned_preview_data)],
-                            dim = 'Data1D',axes=[self.ypreview_axis]))
+                            dim = 'Data1D',axes=[self.ypreview_axis],
+                            do_plot = True))
                 case (_,self.y_size) :
                     dfp.append(DataFromPlugins(name = 'Cheetah3 sum y',
                             data = [np.atleast_1d(binned_preview_data)],
-                            dim = 'Data1D',axes=[self.xpreview_axis]))
+                            dim = 'Data1D',axes=[self.xpreview_axis],
+                            do_plot = True))
                 case (_,_) :
                     dfp.append(DataFromPlugins(name = 'Cheetah3 image',
                             data = [np.atleast_1d(binned_preview_data)],
-                            dim = 'Data2D',axes=[self.xpreview_axis, self.ypreview_axis]))
+                            dim = 'Data2D',axes=[self.xpreview_axis, self.ypreview_axis],
+                            do_plot = True))
         if not(self.controller.camera_controller._data_to_display[0] is None) :
             # Scan only
             xscan_size = self.controller.image_width
@@ -354,14 +376,15 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                                             self.yscan_axis,
                                             self.escan_axis],
                                         nav_indexes=(0, 1),
-                                        do_save=False, do_plot=True))
+                                        do_save=False,
+                                        do_plot=True))
         # I put the if statement this way because comparing to [None,None] will use numpy elementwise comparison
         if self.controller.camera_controller._data_to_display[0] is None \
             and self.controller.camera_controller._data_to_display[1] is None :
             script_dir = Path(__file__).resolve().parent
             def_data_path = script_dir / "default_picture.npy"
             def_data = np.load(def_data_path)
-            dfp.append(DataFromPlugins('No destination selected', data = [def_data]))
+            dfp.append(DataFromPlugins('No destination selected', data = [def_data],do_plot = True))
         return dfp
 
     def emit_data(self, end : bool) -> None :
@@ -405,17 +428,26 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         try:
             # if 'scan' in self.controller.camera_controller.destination_profiles :
             if kwargs.get('live',False) :
+                if self.timer.isActive():
+                    self.timer.stop()
+                    response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                    
                 self.controller.camera_controller.start()
                 if 'scan' in self.controller.camera_controller.destination_profiles :
                     self.controller.start(num_frame=0)
                 self.callback_signal.emit(0)
             else :
                 if not self.timer.isActive():
-                    self.controller.camera_controller.start('softwarestart_softwarestop')
-                    response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
+                    # self.controller.camera_controller.start('softwarestart_timerstop')
+                    if 'live_preview' in self.controller.camera_controller.destination_profiles :
+                        self.controller.camera_controller.start('softwarestart_softwarestop')
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
+                    else :
+                        self.controller.camera_controller.start()
                     self.timer.start()
                 else:
-                    response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
+                    if 'live_preview' in self.controller.camera_controller.destination_profiles :
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
                     self.timer.stop()
                     self.timer.start()
                 if 'scan' in self.controller.camera_controller.destination_profiles :
@@ -428,7 +460,8 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
 
     def stop(self):
         """Stop the current grab hardware wise if necessary"""
-        self.controller.stop_immediately()
+        if 'scan' in self.controller.camera_controller.destination_profiles :
+            self.controller.stop_immediately()
         self.controller.camera_controller.stop()
         
     ####################
@@ -442,6 +475,13 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
     @property
     def y_size(self) :
         return self._y_size
+    
+    def update_destination(self,destination_item) :
+        profiles = self.controller.camera_controller.destination_profiles
+        updated_profiles = [item for item in profiles if item not in self.exclusive_destinations]
+        if destination_item not in updated_profiles: 
+            updated_profiles.append(destination_item)
+        self.controller.camera_controller.destination_profiles = updated_profiles
 
 ######################
 # II. Callback class #
@@ -457,7 +497,13 @@ class ScanCheetah3Callback(QtCore.QObject):
         self.controller = controller
         self.scan_controller = scan_controller
         self.buffer_size = config('CHEETAH3', 'scan', 'buffer_size')
+        # self.timer = QtCore.QTimer()
+        # self.timer.setSingleShot(True)
+        # self.timer.timeout.connect(self.software_stop)
         super().__init__()
+        
+    # def software_stop(self) :
+    #     response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
     
     def readout(self,num_frames : int) -> None :
         profiles = self.controller.destination_profiles
@@ -491,7 +537,11 @@ class ScanCheetah3Callback(QtCore.QObject):
                     self.controller.reset_data()
                     cur_frame_num += 1
                     if num_frames > 0 and cur_frame_num == num_frames :
-                        response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+                        # response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+                        self.controller.client.shutdown(socket.SHUT_RDWR)
+                        self.controller.client.close()
+                        time.sleep(0.01)
+                        self.controller._init_client()
                         self.scan_controller.stop_immediately()
                         break
                 else :
@@ -508,16 +558,20 @@ class ScanCheetah3Callback(QtCore.QObject):
             
     def preview_readout(self, num_frames : int) -> None :
         cur_frame_num = 0
+        # self.timer.setInterval(self.controller.exposure_time.magnitude)
         while True :
-            try : 
+            try :
             # CT10. We start a blocking function. It waits until data are avaible.
+                # self.timer.start()
+                if num_frames> 0 :
+                    time.sleep(self.controller.exposure_time.magnitude)
+                    response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
                 current_image = self.controller.preview()
                 self.controller._preview_data = current_image
                 self.controller.update_data()
                 self.data_sig.emit(True)
                 cur_frame_num += 1
-                if num_frames> 0 and cur_frame_num == num_frames : 
-                    response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+                if num_frames> 0 and cur_frame_num == num_frames :
                     break
                 if self.controller.get_status() == "DA_IDLE" :
                     logger.info("Acquisition finished")

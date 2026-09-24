@@ -233,10 +233,11 @@ class ScanCheetah3(Cheetah3) :
             
     def stop(self):
         super().stop()
-        self.client.shutdown(socket.SHUT_RDWR)
-        self.client.close()
-        time.sleep(0.01)
-        self._init_client()
+        if 'scan' in self.destination_profiles :
+            self.client.shutdown(socket.SHUT_RDWR)
+            self.client.close()
+            time.sleep(0.01)
+            self._init_client()
         
         
         
