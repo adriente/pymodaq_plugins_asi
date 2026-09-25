@@ -84,6 +84,8 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         {'title' : 'Spim parameters', 'name' : 'scan_params', 'type' : 'group', 'children' : [
             {'title': 'Scan width', 'name': 'image_width', 'type': 'int', 'value': 512},
             {'title': 'Scan height', 'name': 'image_height', 'type': 'int', 'value': 512},
+            {'title': 'x2:', 'name': 'mult2', 'type': 'bool_push', 'value': False},
+            {'title': '/2:', 'name': 'div2', 'type': 'bool_push', 'value': False},
             {'title' : 'Dwell time (us)', 'name' : 'dwell_time', 'type' : 'int', 'value' : 10},
             {'title' : 'Cumul number', 'name' : 'cumul_num','type' : 'int', 'value' : 1},
             {'title' : 'Starting delay', 'name' : 'video_time', 'type' : 'int', 'value' : 0}
@@ -141,7 +143,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             if param.value() :
                 if 'save_locally' in self.controller.camera_controller.destination_profiles :
                     pass
-                else : 
+                else :
                     self.controller.camera_controller.destination_profiles.append('save_locally')
             else :
                 if 'save_locally' in self.controller.camera_controller.destination_profiles :
@@ -162,6 +164,14 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             self.controller.image_height = param.value()
             self.controller.camera_controller.yspim_size = self.controller.image_height
             self.set_axes()
+        if param.name() == 'mult2' :
+                if param.value():
+                    self.mult_img()
+                    param.setValue(False)
+        if param.name() == 'div2' :
+                if param.value():
+                    self.div_img()
+                    param.setValue(False)
         elif param.name() == "dwell_time" :
             self.controller.dwell_time = param.value()
         elif param.name() == 'cumul_num' : 
@@ -279,6 +289,26 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
     # I. 3. Data acquisition and axes #
     ###################################
     
+    def mult_img(self) -> None :
+        """
+        Multiplies by two the width and height of the image, in pixels.
+        """
+        self.controller.image_width *= 2
+        self.controller.image_height *= 2
+        self.settings.child('scan_params', 'image_width').setValue(self.controller.image_width)
+        self.settings.child('scan_params', 'image_height').setValue(self.controller.image_height)
+        self.set_axes()
+
+    def div_img(self) -> None :
+        """
+        Divides by two the width and height of the image, in pixels.
+        """
+        self.controller.image_width //= 2
+        self.controller.image_height //= 2
+        self.settings.child('scan_params', 'image_width').setValue(self.controller.image_width)
+        self.settings.child('scan_params', 'image_height').setValue(self.controller.image_height)
+        self.set_axes()
+    
     def set_axes(self) :
         """
         Set the axes for display depending on binning values. Can change the representation from 2D to 1D or 0D.
@@ -370,7 +400,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
             # Scan only
             xscan_size = self.controller.image_width
             yscan_size = self.controller.image_height
-            scan_data = np.reshape(self.controller.camera_controller._data_to_display[0], shape=(xscan_size,yscan_size,513))
+            scan_data = np.reshape(self.controller.camera_controller._data_to_display[0], shape=(yscan_size,xscan_size,513))
             dfp.append(DataFromPlugins('Spectrum image', data=[scan_data],
                                         axes=[self.xscan_axis,
                                             self.yscan_axis,
@@ -437,21 +467,22 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                     self.controller.start(num_frame=0)
                 self.callback_signal.emit(0)
             else :
-                if not self.timer.isActive():
-                    # self.controller.camera_controller.start('softwarestart_timerstop')
-                    if 'live_preview' in self.controller.camera_controller.destination_profiles :
+                if 'scan' in self.controller.camera_controller.destination_profiles :
+                    if self.timer.isActive():
+                        self.timer.stop()
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                    self.controller.camera_controller.start()
+                    self.controller.start(num_frame=0)
+                else : 
+                    if not self.timer.isActive():
                         self.controller.camera_controller.start('softwarestart_softwarestop')
                         response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
-                    else :
-                        self.controller.camera_controller.start()
-                    self.timer.start()
-                else:
-                    if 'live_preview' in self.controller.camera_controller.destination_profiles :
+                        self.timer.start()
+                    else:
                         response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
-                    self.timer.stop()
-                    self.timer.start()
-                if 'scan' in self.controller.camera_controller.destination_profiles :
-                    self.controller.start(num_frame=0)
+                        self.timer.stop()
+                        self.timer.start()
+                
                 self.callback_signal.emit(1)
 
         except Exception as e:
@@ -479,7 +510,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
     def update_destination(self,destination_item) :
         profiles = self.controller.camera_controller.destination_profiles
         updated_profiles = [item for item in profiles if item not in self.exclusive_destinations]
-        if destination_item not in updated_profiles: 
+        if destination_item not in updated_profiles:
             updated_profiles.append(destination_item)
         self.controller.camera_controller.destination_profiles = updated_profiles
 
@@ -531,18 +562,14 @@ class ScanCheetah3Callback(QtCore.QObject):
                 event_list = np.frombuffer(data_read, dtype=np.uint32)
                 fill_array(self.controller._data,event_list)
                 self.controller.update_data()
-                
-                if self.scan_controller.get_frame_index() % self.controller.cumul_num == 0 :
+                # print(self.scan_controller.get_frame_index())
+                if (self.scan_controller.get_frame_index() % self.controller.cumul_num == 0) and (self.scan_controller.get_frame_index()!=0) :
                     self.data_sig.emit(True)
                     self.controller.reset_data()
                     cur_frame_num += 1
                     if num_frames > 0 and cur_frame_num == num_frames :
-                        # response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
-                        self.controller.client.shutdown(socket.SHUT_RDWR)
-                        self.controller.client.close()
-                        time.sleep(0.01)
-                        self.controller._init_client()
                         self.scan_controller.stop_immediately()
+                        self.controller.stop()
                         break
                 else :
                     self.data_sig.emit(False)
