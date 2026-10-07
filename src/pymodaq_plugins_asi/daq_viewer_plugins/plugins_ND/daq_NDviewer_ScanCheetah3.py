@@ -205,6 +205,10 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         self.timer.setSingleShot(True)
         self.timer.setInterval(config("CHEETAH3", "misc", 'acquisition_timeout'))
         self.timer.timeout.connect(self.stop)
+        self.scan_timer = QtCore.QTimer()
+        self.scan_timer.setSingleShot(False)
+        self.scan_timer.setInterval(100)
+        self.scan_timer.timeout.connect(self.update_camera)
         self.exclusive_destinations = ['scan','live_preview']
 
     def ini_detector(self, controller=None):
@@ -279,6 +283,7 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         self.callback_signal.connect(self.callback.readout)
         # CT08. We connect the signal of the callback to the execution of PyMoDAQ GUI to display data.
         self.callback.data_sig.connect(self.emit_data)
+        self.callback.stop_cam_sig.connect(self.stop_scan_timer)
 
     def close(self):
         """Terminate the communication protocol"""
@@ -440,6 +445,14 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                                                 data=dfp))
         except Exception as e:
             self.emit_status(ThreadCommand('Update_Status', [str(e), 'log']))
+            
+    def update_camera(self) :
+        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/stop')
+        time.sleep(0.002)
+        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
+             
+    def stop_scan_timer(self) :
+        self.scan_timer.stop()
 
     def grab_data(self, Naverage=1, **kwargs):
         """Start a grab from the detector
@@ -458,9 +471,18 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
         try:
             # if 'scan' in self.controller.camera_controller.destination_profiles :
             if kwargs.get('live',False) :
-                if self.timer.isActive():
-                    self.timer.stop()
-                    response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                timers_states = (self.timer.isActive(), self.scan_timer.isActive())
+                match timers_states :
+                    case (True, False) :
+                        self.timer.stop()
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                    case (False, True) :
+                        self.scan_timer.stop()
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                    case (True, True) :
+                        self.timer.stop()
+                        self.scan_timer.stop()
+                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
                     
                 self.controller.camera_controller.start()
                 if 'scan' in self.controller.camera_controller.destination_profiles :
@@ -468,12 +490,22 @@ class DAQ_NDViewer_ScanCheetah3(DAQ_Viewer_base):
                 self.callback_signal.emit(0)
             else :
                 if 'scan' in self.controller.camera_controller.destination_profiles :
-                    if self.timer.isActive():
-                        self.timer.stop()
-                        response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
-                    self.controller.camera_controller.start()
+                    # if self.scan_timer.isActive():
+                    #     response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
+                    #     self.scan_timer.stop()
+                    #     self.scan_timer.start()
+                    #     # response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/stop')
+                    # else :
+                    #     self.timer.start()
+                    if self.scan_timer.isActive():
+                        self.scan_timer.stop()
+                        self.scan_timer.start()
+                    else :
+                        self.scan_timer.start()
+                    self.controller.camera_controller.start('softwarestart_softwarestop')
+                    response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
                     self.controller.start(num_frame=0)
-                else : 
+                else :
                     if not self.timer.isActive():
                         self.controller.camera_controller.start('softwarestart_softwarestop')
                         response = self.controller.camera_controller.get_request(url=self.controller.camera_controller.serverurl + '/measurement/trigger/start')
@@ -523,23 +555,28 @@ class ScanCheetah3Callback(QtCore.QObject):
 
     """
     data_sig = QtCore.Signal(bool)
+    stop_cam_sig = QtCore.Signal()
 
     def __init__(self, controller, scan_controller):
         self.controller = controller
         self.scan_controller = scan_controller
         self.buffer_size = config('CHEETAH3', 'scan', 'buffer_size')
         # self.timer = QtCore.QTimer()
-        # self.timer.setSingleShot(True)
-        # self.timer.timeout.connect(self.software_stop)
+        # self.timer.setSingleShot(False)
+        # self.timer.setInterval(100)
+        # self.timer.timeout.connect(self.update_camera)
         super().__init__()
         
-    # def software_stop(self) :
+    # def update_camera(self) :
     #     response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+    #     time.sleep(0.002)
+    #     response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/start')
     
     def readout(self,num_frames : int) -> None :
         profiles = self.controller.destination_profiles
         if 'scan' in profiles and 'live_preview' in profiles :
-            self.scan_preview_readout(num_frames)
+            raise NotImplementedError
+            # self.scan_preview_readout(num_frames)
         elif 'scan' in profiles :
             self.scan_readout(num_frames)
         elif 'live_preview' in profiles :
@@ -548,41 +585,72 @@ class ScanCheetah3Callback(QtCore.QObject):
             raise NotImplementedError(f"The destination profile : {profiles} is not implemented.")
             
     def scan_readout(self,num_frames : int) -> None :
-        cur_frame_num = 0
-        while True :
-            try :
-            # CT10. We start a blocking function. It waits until data are avaible.
-                data_read = self.controller.client.recv(self.buffer_size)
-                if not data_read :
-                    logger.info("No data received")
-                    break
-                q = len(data_read) % 8
-                if q:
-                    data_read += self.controller.client.recv(8 - q)
-                event_list = np.frombuffer(data_read, dtype=np.uint32)
-                fill_array(self.controller._data,event_list)
-                self.controller.update_data()
-                # print(self.scan_controller.get_frame_index())
-                if (self.scan_controller.get_frame_index() % self.controller.cumul_num == 0) and (self.scan_controller.get_frame_index()!=0) :
-                    self.data_sig.emit(True)
-                    self.controller.reset_data()
-                    cur_frame_num += 1
-                    if num_frames > 0 and cur_frame_num == num_frames :
-                        self.scan_controller.stop_immediately()
-                        self.controller.stop()
+        # cur_frame_num = 0
+        if num_frames == 0 :
+            while True :
+                try :
+                    # CT10. We start a blocking function. It waits until data are avaible.
+                    data_read = self.controller.client.recv(self.buffer_size)
+                    if not data_read :
+                        logger.info("No data received")
                         break
-                else :
-                    self.data_sig.emit(False)
-                if self.controller.get_status() == "DA_IDLE" :
-                    logger.info("Acquisition finished")
+                    q = len(data_read) % 8
+                    if q:
+                        data_read += self.controller.client.recv(8 - q)
+                    event_list = np.frombuffer(data_read, dtype=np.uint32)
+                    fill_array(self.controller._data,event_list)
+                    self.controller.update_data()
+                    # print(self.scan_controller.get_frame_index())
+                    if (self.scan_controller.get_frame_index() % self.controller.cumul_num == 0) and (self.scan_controller.get_frame_index()!=0) :
+                        # response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+                        self.data_sig.emit(True)
+                        self.controller.reset_data()
+                        # cur_frame_num += 1
+                        # if num_frames > 0 and cur_frame_num == num_frames :
+                        #     self.scan_controller.stop_immediately()
+                        #     self.controller.stop()
+                        #     break
+                    else :
+                        self.data_sig.emit(False)
+                    if self.controller.get_status() == "DA_IDLE" :
+                        logger.info("Acquisition finished")
+                        break
+                    if not self.scan_controller.wait_for_acq() :
+                        logger.info("Scan finished")
+                        break
+                except (BrokenPipeError, OSError) as e :
+                    logger.info('Acquistion stopped because of error %s',e)
                     break
-                if not self.scan_controller.wait_for_acq() :
-                    logger.info("Scan finished")
+        else :
+            # self.timer.start()
+            while True :
+                try :
+                    data_read = self.controller.client.recv(self.buffer_size)
+                    if not data_read :
+                        break
+                    q = len(data_read) % 8
+                    if q:
+                        data_read += self.controller.client.recv(8 - q)
+                        
+                    event_list = np.frombuffer(data_read, dtype=np.uint32)
+                    fill_array(self.controller._data,event_list)
+                    self.controller.update_data()
+                    while (self.scan_controller.get_frame_index() % self.controller.cumul_num == 0) and (self.scan_controller.get_frame_index()!=0) :
+                        self.scan_controller.stop_immediately()
+                        self.stop_cam_sig.emit()
+                        self.data_sig.emit(True)
+                        self.controller.reset_data()
+                        break
+                    if self.controller.get_status() == "DA_IDLE" :
+                        logger.info("Acquisition finished")
+                        break
+                    # if not self.scan_controller.wait_for_acq() :
+                    #     logger.info("Scan finished")
+                    #     break
+                except (BrokenPipeError, OSError) as e :
+                    logger.info('Acquistion stopped because of error %s',e)
                     break
-            except (BrokenPipeError, OSError) as e :
-                logger.info('Acquistion stopped because of error %s',e)
-                break
-            
+    
     def preview_readout(self, num_frames : int) -> None :
         cur_frame_num = 0
         # self.timer.setInterval(self.controller.exposure_time.magnitude)
@@ -607,43 +675,43 @@ class ScanCheetah3Callback(QtCore.QObject):
                 logger.info('Acquistion stopped.')
                 break
             
-    def scan_preview_readout(self,num_frames : int) -> None :
-        cur_frame_num = 0
-        while True :
-            try :
-            # CT10. We start a blocking function. It waits until data are avaible.
-                data_read = self.controller.client.recv(self.buffer_size)
-                if not data_read :
-                    logger.info("No data received")
-                    break
-                q = len(data_read) % 8
-                if q:
-                    data_read += self.controller.client.recv(8 - q)
-                event_list = np.frombuffer(data_read, dtype=np.uint32)
-                fill_array(self.controller._data,event_list)
-                current_image = self.controller.preview()
-                self.controller._preview_data = current_image
-                self.controller.update_data()
+    # def scan_preview_readout(self,num_frames : int) -> None :
+    #     cur_frame_num = 0
+    #     while True :
+    #         try :
+    #         # CT10. We start a blocking function. It waits until data are avaible.
+    #             data_read = self.controller.client.recv(self.buffer_size)
+    #             if not data_read :
+    #                 logger.info("No data received")
+    #                 break
+    #             q = len(data_read) % 8
+    #             if q:
+    #                 data_read += self.controller.client.recv(8 - q)
+    #             event_list = np.frombuffer(data_read, dtype=np.uint32)
+    #             fill_array(self.controller._data,event_list)
+    #             current_image = self.controller.preview()
+    #             self.controller._preview_data = current_image
+    #             self.controller.update_data()
                 
-                if self.scan_controller.get_frame_index() % self.controller.cumul_num == 0 :
-                    self.data_sig.emit(True)
-                    self.controller.reset_data()
-                    cur_frame_num += 1
-                    if num_frames > 0 and cur_frame_num == num_frames :
-                        response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
-                        self.scan_controller.stop_immediately()
-                        break
-                else :
-                    self.data_sig.emit(False)
-                if self.controller.get_status() == "DA_IDLE" :
-                    logger.info("Acquisition finished")
-                    break
-                if not self.scan_controller.wait_for_acq() :
-                    logger.info("Scan finished")
-                    break
-            except (BrokenPipeError, OSError) as e :
-                logger.info('Acquistion stopped because of error %s',e)
-                break
+    #             if self.scan_controller.get_frame_index() % self.controller.cumul_num == 0 :
+    #                 self.data_sig.emit(True)
+    #                 self.controller.reset_data()
+    #                 cur_frame_num += 1
+    #                 if num_frames > 0 and cur_frame_num == num_frames :
+    #                     response = self.controller.get_request(url=self.controller.serverurl + '/measurement/trigger/stop')
+    #                     self.scan_controller.stop_immediately()
+    #                     break
+    #             else :
+    #                 self.data_sig.emit(False)
+    #             if self.controller.get_status() == "DA_IDLE" :
+    #                 logger.info("Acquisition finished")
+    #                 break
+    #             if not self.scan_controller.wait_for_acq() :
+    #                 logger.info("Scan finished")
+    #                 break
+    #         except (BrokenPipeError, OSError) as e :
+    #             logger.info('Acquistion stopped because of error %s',e)
+    #             break
         
                 
     # def preview_readout(self,num_frames : int) :

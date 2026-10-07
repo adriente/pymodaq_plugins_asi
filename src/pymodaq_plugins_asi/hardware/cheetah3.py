@@ -404,7 +404,7 @@ class Cheetah3() :
         The `TriggerPeriod` and the `ExposureTime` have to be set equal.
         """ 
         self.detector_config['TriggerMode'] = 'SOFTWARESTART_SOFTWARESTOP'
-        self.detector_config['Tdc'] = ['PN0123','PN0123']
+        self.detector_config['Tdc'] = ['PN0','PN0']
         # self.detector_config['TriggerPeriod'] = self.exposure_time.magnitude
         # self.detector_config['ExposureTime'] = self.exposure_time.magnitude
         self.detector_config['nTriggers'] = kwargs['ntriggers']
